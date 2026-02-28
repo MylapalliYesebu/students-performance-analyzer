@@ -2,10 +2,11 @@ from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
 import bcrypt
+from passlib.context import CryptContext
 from fastapi.security import OAuth2PasswordBearer
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from . import schemas, database, models
+import schemas, database, models
 
 # Secret key and algorithm (Hardcoded for MVP)
 SECRET_KEY = "SECRET_KEY_FOR_DEV"

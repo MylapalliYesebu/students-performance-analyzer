@@ -3,7 +3,11 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import AdminLayout from './components/AdminLayout';
+import AdminBatches from './pages/admin/AdminBatches';
 import AdminDepartments from './pages/admin/AdminDepartments';
+import AdminSections from './pages/admin/AdminSections';
+import AdminSubjectOfferings from './pages/admin/AdminSubjectOfferings';
+import AdminExamSessions from './pages/admin/AdminExamSessions';
 import AdminSemesters from './pages/admin/AdminSemesters';
 import AdminSubjects from './pages/admin/AdminSubjects';
 import AdminStudents from './pages/admin/AdminStudents';
@@ -33,8 +37,24 @@ function App() {
                         element={isAuthenticated ? <Dashboard /> : <Navigate to="/login" />}
                     />
                     <Route
+                        path="/admin/batches"
+                        element={isAuthenticated ? <AdminLayout><AdminBatches /></AdminLayout> : <Navigate to="/login" />}
+                    />
+                    <Route
                         path="/admin/departments"
                         element={isAuthenticated ? <AdminLayout><AdminDepartments /></AdminLayout> : <Navigate to="/login" />}
+                    />
+                    <Route
+                        path="/admin/sections"
+                        element={isAuthenticated ? <AdminLayout><AdminSections /></AdminLayout> : <Navigate to="/login" />}
+                    />
+                    <Route
+                        path="/admin/subject-offerings"
+                        element={isAuthenticated ? <AdminLayout><AdminSubjectOfferings /></AdminLayout> : <Navigate to="/login" />}
+                    />
+                    <Route
+                        path="/admin/exam-sessions"
+                        element={isAuthenticated ? <AdminLayout><AdminExamSessions /></AdminLayout> : <Navigate to="/login" />}
                     />
                     <Route
                         path="/admin/semesters"

@@ -1,23 +1,34 @@
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from .. import database, models, auth, schemas
+import database, models, auth, schemas
 
 router = APIRouter()
 
 @router.get("/stats")
 def read_admin_stats(current_user: models.User = Depends(auth.RoleChecker(["admin"])), db: Session = Depends(database.get_db)):
+    # LEGACY COMPAT: Stats now include new academic model entities
     
     student_count = db.query(models.Student).count()
     teacher_count = db.query(models.Teacher).count()
     dept_count = db.query(models.Department).count()
     subject_count = db.query(models.Subject).count()
     
+    # NEW MODEL: Add counts for new entities
+    batch_count = db.query(models.Batch).count()
+    section_count = db.query(models.Section).count()
+    offering_count = db.query(models.SubjectOffering).count()
+    exam_session_count = db.query(models.ExamSession).count()
+    
     return {
         "students": student_count,
         "teachers": teacher_count,
         "departments": dept_count,
-        "subjects": subject_count
+        "subjects": subject_count,
+        "batches": batch_count,
+        "sections": section_count,
+        "subject_offerings": offering_count,
+        "exam_sessions": exam_session_count
     }
 
 @router.get("/reports/export")
@@ -356,3 +367,123 @@ def update_settings(
     db.commit()
     db.refresh(settings)
     return settings
+
+
+# ============================================================================
+# NEW MODEL ENDPOINTS: Sections
+# ============================================================================
+
+@router.get("/sections")
+def get_sections(
+    current_user: models.User = Depends(auth.RoleChecker(["admin", "teacher"])),
+    db: Session = Depends(database.get_db)
+):
+    """List all sections with batch and department info."""
+    from schemas_extended import SectionResponse
+    sections = db.query(models.Section).all()
+    return [SectionResponse.from_orm(s) for s in sections]
+
+
+@router.post("/sections", status_code=status.HTTP_201_CREATED)
+def create_section(
+    name: str,
+    department_id: int,
+    batch_id: int,
+    current_user: models.User = Depends(auth.RoleChecker(["admin"])),
+    db: Session = Depends(database.get_db)
+):
+    """Create a new section."""
+    # Verify department exists
+    if not db.query(models.Department).filter(models.Department.id == department_id).first():
+        raise HTTPException(status_code=404, detail="Department not found")
+    
+    # Verify batch exists
+    if not db.query(models.Batch).filter(models.Batch.id == batch_id).first():
+        raise HTTPException(status_code=404, detail="Batch not found")
+    
+    new_section = models.Section(
+        name=name,
+        department_id=department_id,
+        batch_id=batch_id
+    )
+    db.add(new_section)
+    db.commit()
+    db.refresh(new_section)
+    
+    from schemas_extended import SectionResponse
+    return SectionResponse.from_orm(new_section)
+
+
+# ============================================================================
+# NEW MODEL ENDPOINTS: Subject Offerings
+# ============================================================================
+
+@router.get("/subject-offerings")
+def get_subject_offerings(
+    teacher_id: int = None,
+    section_id: int = None,
+    academic_year: str = None,
+    current_user: models.User = Depends(auth.RoleChecker(["admin", "teacher"])),
+    db: Session = Depends(database.get_db)
+):
+    """List all subject offerings with optional filters."""
+    from schemas_extended import SubjectOfferingResponse
+    
+    query = db.query(models.SubjectOffering)
+    
+    if teacher_id:
+        query = query.filter(models.SubjectOffering.teacher_id == teacher_id)
+    if section_id:
+        query = query.filter(models.SubjectOffering.section_id == section_id)
+    if academic_year:
+        query = query.filter(models.SubjectOffering.academic_year == academic_year)
+    
+    offerings = query.all()
+    return [SubjectOfferingResponse.from_orm(o) for o in offerings]
+
+
+@router.post("/subject-offerings", status_code=status.HTTP_201_CREATED)
+def create_subject_offering(
+    subject_id: int,
+    section_id: int,
+    teacher_id: int,
+    academic_year: str,
+    current_user: models.User = Depends(auth.RoleChecker(["admin"])),
+    db: Session = Depends(database.get_db)
+):
+    """Create a new subject offering."""
+    # Verify subject exists
+    if not db.query(models.Subject).filter(models.Subject.id == subject_id).first():
+        raise HTTPException(status_code=404, detail="Subject not found")
+    
+    # Verify section exists
+    if not db.query(models.Section).filter(models.Section.id == section_id).first():
+        raise HTTPException(status_code=404, detail="Section not found")
+    
+    # Verify teacher exists
+    if not db.query(models.Teacher).filter(models.Teacher.id == teacher_id).first():
+        raise HTTPException(status_code=404, detail="Teacher not found")
+    
+    # Check for duplicates
+    existing = db.query(models.SubjectOffering).filter(
+        models.SubjectOffering.subject_id == subject_id,
+        models.SubjectOffering.section_id == section_id,
+        models.SubjectOffering.academic_year == academic_year
+    ).first()
+    
+    if existing:
+        raise HTTPException(status_code=400, detail="Subject offering already exists for this section and academic year")
+    
+    new_offering = models.SubjectOffering(
+        subject_id=subject_id,
+        section_id=section_id,
+        teacher_id=teacher_id,
+        academic_year=academic_year
+    )
+    db.add(new_offering)
+    db.commit()
+    db.refresh(new_offering)
+    
+    from schemas_extended import SubjectOfferingResponse
+    return SubjectOfferingResponse.from_orm(new_offering)
+

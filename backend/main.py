@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .database import engine, Base
-from .routers import auth_router, admin_router, teacher_router, student_router
+from database import engine, Base
+from routers import auth_router, admin_router, teacher_router, student_router
 
 # Create database tables
 Base.metadata.create_all(bind=engine)

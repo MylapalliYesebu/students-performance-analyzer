@@ -4,49 +4,47 @@ import { useNavigate } from 'react-router-dom';
 
 const TeacherStudents = () => {
     const navigate = useNavigate();
-    const [departments, setDepartments] = useState([]);
-    const [semesters, setSemesters] = useState([]);
+    const [subjectOfferings, setSubjectOfferings] = useState([]);
     const [students, setStudents] = useState([]);
-    const [selectedDept, setSelectedDept] = useState('');
-    const [selectedSem, setSelectedSem] = useState('');
+    const [selectedOffering, setSelectedOffering] = useState(null);
     const [loading, setLoading] = useState(true);
     const [searching, setSearching] = useState(false);
     const [error, setError] = useState(null);
     const [searched, setSearched] = useState(false);
 
     useEffect(() => {
-        fetchFilters();
+        fetchSubjectOfferings();
     }, []);
 
-    const fetchFilters = async () => {
+    const fetchSubjectOfferings = async () => {
         try {
-            const [deptRes, semRes] = await Promise.all([
-                api.get('/admin/departments'), // Now accessible to teachers
-                api.get('/admin/semesters')    // Now accessible to teachers
-            ]);
-            setDepartments(deptRes.data);
-            setSemesters(semRes.data);
+            // NEW ENDPOINT: Get enriched subject offerings for teacher
+            const res = await api.get('/teacher/subject-offerings');
+            setSubjectOfferings(res.data);
             setLoading(false);
         } catch (err) {
-            setError('Failed to fetch filter options');
+            setError('Failed to fetch your assigned subject offerings');
             setLoading(false);
         }
     };
 
     const handleSearch = async () => {
-        if (!selectedDept || !selectedSem) return;
+        if (!selectedOffering) return;
 
         setSearching(true);
         setError(null);
         setSearched(true);
 
         try {
-            const response = await api.get(`/teacher/students/${selectedDept}/${selectedSem}`);
+            // Fetch students by section (section-first approach)
+            const response = await api.get(
+                `/teacher/students/${selectedOffering.subject.department_id}/${selectedOffering.subject.semester_id}?section_id=${selectedOffering.section.id}`
+            );
             setStudents(response.data);
             setSearching(false);
         } catch (err) {
             console.error(err);
-            setError('Failed to fetch students for this class');
+            setError('Failed to fetch students for this section');
             setStudents([]);
             setSearching(false);
         }
@@ -62,42 +60,36 @@ const TeacherStudents = () => {
             {error && <div className="alert alert-danger" style={{ color: 'red', marginBottom: '1rem' }}>{error}</div>}
 
             <div className="card" style={{ marginBottom: '2rem', padding: '1.5rem', border: '1px solid #ddd', borderRadius: '4px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '1rem', alignItems: 'end' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '1rem', alignItems: 'end' }}>
                     <div>
-                        <label style={{ display: 'block', marginBottom: '0.5rem' }}>Department</label>
+                        <label style={{ display: 'block', marginBottom: '0.5rem' }}>Subject Offering (Section)</label>
                         <select
-                            value={selectedDept}
-                            onChange={(e) => setSelectedDept(e.target.value)}
+                            value={selectedOffering ? selectedOffering.subject_offering_id : ''}
+                            onChange={(e) => {
+                                const offering = subjectOfferings.find(o => o.subject_offering_id === parseInt(e.target.value));
+                                setSelectedOffering(offering);
+                            }}
                             style={{ width: '100%', padding: '0.5rem' }}
                         >
-                            <option value="">Select Department</option>
-                            {departments.map(d => (
-                                <option key={d.id} value={d.id}>{d.code} - {d.name}</option>
+                            <option value="">Select Subject & Section</option>
+                            {subjectOfferings.map(offering => (
+                                <option key={offering.subject_offering_id} value={offering.subject_offering_id}>
+                                    {offering.subject.name} ({offering.subject.code}) - Section {offering.section.name} - AY {offering.academic_year}
+                                </option>
                             ))}
                         </select>
-                    </div>
-
-                    <div>
-                        <label style={{ display: 'block', marginBottom: '0.5rem' }}>Semester</label>
-                        <select
-                            value={selectedSem}
-                            onChange={(e) => setSelectedSem(e.target.value)}
-                            style={{ width: '100%', padding: '0.5rem' }}
-                        >
-                            <option value="">Select Semester</option>
-                            {semesters.map(s => (
-                                <option key={s.id} value={s.id}>{s.name}</option>
-                            ))}
-                        </select>
+                        <small style={{ color: '#666', fontSize: '0.85rem', marginTop: '0.25rem', display: 'block' }}>
+                            Select a subject offering to view students in that section
+                        </small>
                     </div>
 
                     <button
                         onClick={handleSearch}
                         className="btn btn-primary"
-                        disabled={!selectedDept || !selectedSem || searching}
+                        disabled={!selectedOffering || searching}
                         style={{ padding: '0.5rem 1rem', height: '38px', marginBottom: '1px' }}
                     >
-                        {searching ? 'Start Search...' : 'Search'}
+                        {searching ? 'Loading...' : 'Load Students'}
                     </button>
                 </div>
             </div>
@@ -112,7 +104,7 @@ const TeacherStudents = () => {
                                 <tr style={{ background: '#f8f9fa', borderBottom: '2px solid #dee2e6' }}>
                                     <th style={{ padding: '0.75rem', textAlign: 'left' }}>Roll Number</th>
                                     <th style={{ padding: '0.75rem', textAlign: 'left' }}>Name</th>
-                                    <th style={{ padding: '0.75rem', textAlign: 'left' }}>Department</th>
+                                    <th style={{ padding: '0.75rem', textAlign: 'left' }}>Section</th>
                                     <th style={{ padding: '0.75rem', textAlign: 'left' }}>Semester</th>
                                 </tr>
                             </thead>
@@ -128,8 +120,8 @@ const TeacherStudents = () => {
                                                 {s.name}
                                             </span>
                                         </td>
-                                        <td style={{ padding: '0.75rem' }}>{departments.find(d => d.id === s.department_id)?.code}</td>
-                                        <td style={{ padding: '0.75rem' }}>{semesters.find(sem => sem.id === s.current_semester_id)?.name}</td>
+                                        <td style={{ padding: '0.75rem' }}>{selectedOffering ? selectedOffering.section.name : '-'}</td>
+                                        <td style={{ padding: '0.75rem' }}>{selectedOffering ? selectedOffering.semester_name : '-'}</td>
                                     </tr>
                                 ))}
                             </tbody>

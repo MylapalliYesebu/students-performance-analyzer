@@ -4,8 +4,8 @@ import { useNavigate } from 'react-router-dom';
 
 const TeacherMarks = () => {
     const navigate = useNavigate();
-    const [subjects, setSubjects] = useState([]);
-    const [selectedSubject, setSelectedSubject] = useState('');
+    const [subjectOfferings, setSubjectOfferings] = useState([]);
+    const [selectedOffering, setSelectedOffering] = useState(null);
     const [students, setStudents] = useState([]); // Used for roll number lookup
     const [rollNumber, setRollNumber] = useState('');
     const [examType, setExamType] = useState('Mid-1');
@@ -15,33 +15,35 @@ const TeacherMarks = () => {
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
-        fetchSubjects();
+        fetchSubjectOfferings();
     }, []);
 
-    const fetchSubjects = async () => {
+    const fetchSubjectOfferings = async () => {
         try {
-            const res = await api.get('/teacher/subjects');
-            setSubjects(res.data);
+            // NEW ENDPOINT: Single call returns fully enriched data
+            const res = await api.get('/teacher/subject-offerings');
+            setSubjectOfferings(res.data);
         } catch (err) {
-            console.error("Failed to fetch subjects", err);
+            console.error("Failed to fetch subject offerings", err);
         }
     };
 
-    const handleSubjectChange = async (e) => {
-        const subjectId = e.target.value;
-        setSelectedSubject(subjectId);
+    const handleOfferingChange = async (e) => {
+        const offeringId = e.target.value;
+        const offering = subjectOfferings.find(o => o.subject_offering_id === parseInt(offeringId));
+        setSelectedOffering(offering);
         setRollNumber('');
         setStudents([]);
 
-        if (subjectId) {
-            const subject = subjects.find(s => s.id === parseInt(subjectId));
-            if (subject) {
-                try {
-                    const res = await api.get(`/teacher/students/${subject.department_id}/${subject.semester_id}`);
-                    setStudents(res.data);
-                } catch (err) {
-                    console.error("Failed to fetch class list", err);
-                }
+        if (offering && offering.subject && offering.section) {
+            try {
+                // Fetch students by section (new model)
+                const res = await api.get(
+                    `/teacher/students/${offering.subject.department_id}/${offering.subject.semester_id}?section_id=${offering.section.id}`
+                );
+                setStudents(res.data);
+            } catch (err) {
+                console.error("Failed to fetch class list", err);
             }
         }
     };
@@ -64,10 +66,17 @@ const TeacherMarks = () => {
             return;
         }
 
+        if (!selectedOffering || !selectedOffering.subject) {
+            setMessage('Error: Please select a subject offering.');
+            setLoading(false);
+            return;
+        }
+
         try {
+            // Send legacy params - backend maps to new model internally
             await api.post('/teacher/marks', {
                 student_id: studentId,
-                subject_id: parseInt(selectedSubject),
+                subject_id: selectedOffering.subject_id,
                 exam_type: examType,
                 marks_obtained: parseFloat(marks),
                 total_marks: parseFloat(totalMarks)
@@ -93,18 +102,25 @@ const TeacherMarks = () => {
             <div className="card" style={{ maxWidth: '500px', margin: '0 auto', padding: '2rem' }}>
                 <form onSubmit={handleSubmit}>
                     <div className="form-group">
-                        <label className="form-label">Subject</label>
+                        <label className="form-label">Subject Offering</label>
                         <select
                             className="form-input"
-                            value={selectedSubject}
-                            onChange={handleSubjectChange}
+                            value={selectedOffering ? selectedOffering.subject_offering_id : ''}
+                            onChange={handleOfferingChange}
                             required
                         >
-                            <option value="">Select Subject</option>
-                            {subjects.map(s => (
-                                <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
+                            <option value="">Select Subject Offering</option>
+                            {subjectOfferings.map(offering => (
+                                <option key={offering.subject_offering_id} value={offering.subject_offering_id}>
+                                    {offering.subject ?
+                                        `${offering.subject.name} (${offering.subject.code}) - Section ${offering.section ? offering.section.name : 'N/A'} - AY ${offering.academic_year}`
+                                        : 'Loading...'}
+                                </option>
                             ))}
                         </select>
+                        <small style={{ color: '#666', fontSize: '0.85rem', marginTop: '0.25rem', display: 'block' }}>
+                            Shows subject with section and academic year
+                        </small>
                     </div>
 
                     <div className="form-group">
@@ -116,9 +132,9 @@ const TeacherMarks = () => {
                             onChange={(e) => setRollNumber(e.target.value)}
                             placeholder="e.g., 210101"
                             required
-                            disabled={!selectedSubject}
+                            disabled={!selectedOffering}
                         />
-                        {selectedSubject && students.length === 0 && (
+                        {selectedOffering && students.length === 0 && (
                             <small style={{ color: 'orange' }}>Loading class list...</small>
                         )}
                     </div>
@@ -130,11 +146,22 @@ const TeacherMarks = () => {
                             value={examType}
                             onChange={(e) => setExamType(e.target.value)}
                         >
-                            <option value="Slip Test">Slip Test</option>
-                            <option value="Mid-1">Mid-1</option>
-                            <option value="Mid-2">Mid-2</option>
-                            <option value="University">University</option>
+                            <option value="Slip Test">
+                                Slip Test{selectedOffering ? ` - Sem ${selectedOffering.semester_name} - AY ${selectedOffering.academic_year}` : ''}
+                            </option>
+                            <option value="Mid-1">
+                                Mid-1{selectedOffering ? ` - Sem ${selectedOffering.semester_name} - AY ${selectedOffering.academic_year}` : ''}
+                            </option>
+                            <option value="Mid-2">
+                                Mid-2{selectedOffering ? ` - Sem ${selectedOffering.semester_name} - AY ${selectedOffering.academic_year}` : ''}
+                            </option>
+                            <option value="University">
+                                University{selectedOffering ? ` - Sem ${selectedOffering.semester_name} - AY ${selectedOffering.academic_year}` : ''}
+                            </option>
                         </select>
+                        <small style={{ color: '#666', fontSize: '0.85rem', marginTop: '0.25rem', display: 'block' }}>
+                            Exam type for selected semester and academic year
+                        </small>
                     </div>
 
                     <div className="form-group">
@@ -168,7 +195,7 @@ const TeacherMarks = () => {
                     <button
                         type="submit"
                         className="btn btn-primary"
-                        disabled={loading || !selectedSubject}
+                        disabled={loading || !selectedOffering}
                     >
                         {loading ? 'Uploading...' : 'Submit Marks'}
                     </button>

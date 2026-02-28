@@ -10,6 +10,8 @@ const StudentDashboard = () => {
     const navigate = useNavigate();
     const [marks, setMarks] = useState([]);
     const [analysis, setAnalysis] = useState(null);
+    const [aiSummary, setAiSummary] = useState(null);
+    const [aiSummaryLoading, setAiSummaryLoading] = useState(true);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -23,7 +25,21 @@ const StudentDashboard = () => {
                 console.error("Failed to fetch student data", err);
             }
         };
+
+        const fetchAISummary = async () => {
+            try {
+                const aiRes = await api.get('/student/ai-summary');
+                setAiSummary(aiRes.data);
+            } catch (err) {
+                console.error("Failed to fetch AI summary", err);
+                // Gracefully handle - don't block page
+            } finally {
+                setAiSummaryLoading(false);
+            }
+        };
+
         fetchData();
+        fetchAISummary();
     }, []);
 
     const chartData = {
@@ -46,6 +62,54 @@ const StudentDashboard = () => {
                     <button className="btn btn-secondary" onClick={() => navigate('/student/analysis')}>View Detailed Analysis</button>
                 </div>
             </div>
+
+            {/* AI Performance Summary Card */}
+            {!aiSummaryLoading && aiSummary && (
+                <div className="card" style={{
+                    marginBottom: '2rem',
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    color: 'white',
+                    padding: '1.5rem',
+                    borderRadius: '8px',
+                    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', marginBottom: '1rem' }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" style={{ width: '24px', height: '24px', marginRight: '0.5rem' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                        </svg>
+                        <h3 style={{ margin: 0, fontSize: '1.25rem' }}>
+                            AI Performance Insights
+                            {aiSummary.source === 'fallback' && (
+                                <span style={{
+                                    fontSize: '0.75rem',
+                                    marginLeft: '0.5rem',
+                                    opacity: 0.8,
+                                    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                                    padding: '0.125rem 0.5rem',
+                                    borderRadius: '4px'
+                                }}>
+                                    Rule-based
+                                </span>
+                            )}
+                        </h3>
+                    </div>
+                    <p style={{
+                        fontSize: '1rem',
+                        lineHeight: '1.6',
+                        margin: '0 0 1rem 0',
+                        whiteSpace: 'pre-wrap'
+                    }}>
+                        {aiSummary.summary}
+                    </p>
+                    <div style={{
+                        fontSize: '0.875rem',
+                        opacity: 0.8,
+                        fontStyle: 'italic'
+                    }}>
+                        Generated {new Date(aiSummary.generated_at).toLocaleString()}
+                    </div>
+                </div>
+            )}
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
                 <div>

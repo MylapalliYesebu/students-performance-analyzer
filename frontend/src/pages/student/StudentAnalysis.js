@@ -44,19 +44,47 @@ const StudentAnalysis = () => {
         fetchAnalysis();
     }, []);
 
-    // Prepare Chart Data
-    const chartData = analysis && analysis.semester_trend ? {
-        labels: Object.keys(analysis.semester_trend),
-        datasets: [
-            {
-                label: 'Average Percentage per Semester',
-                data: Object.values(analysis.semester_trend),
-                borderColor: 'rgb(75, 192, 192)',
-                backgroundColor: 'rgba(75, 192, 192, 0.5)',
-                tension: 0.3, // Add some curve
-            },
-        ],
-    } : null;
+    /**
+     * Process trend data to use exam-session aware labels
+     * Maintains backward compatibility with legacy semester_trend
+     */
+    const processChartData = () => {
+        if (!analysis || !analysis.semester_trend) return null;
+
+        const labels = [];
+        const data = [];
+
+        // Check if trend uses exam session format (object with metadata)
+        Object.entries(analysis.semester_trend).forEach(([key, value]) => {
+            if (typeof value === 'object' && value.percentage !== undefined) {
+                // NEW: Exam session format with metadata
+                const label = value.exam_session
+                    ? `${value.exam_session.exam_type} - Sem ${value.exam_session.semester_name} (${value.exam_session.academic_year})`
+                    : `${value.exam_type} - Sem ${value.semester}`;
+                labels.push(label);
+                data.push(value.percentage);
+            } else {
+                // LEGACY: Simple key-value format
+                labels.push(key);
+                data.push(value);
+            }
+        });
+
+        return {
+            labels,
+            datasets: [
+                {
+                    label: 'Average Percentage per Exam',
+                    data,
+                    borderColor: 'rgb(75, 192, 192)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.5)',
+                    tension: 0.3,
+                },
+            ],
+        };
+    };
+
+    const chartData = processChartData();
 
     const chartOptions = {
         responsive: true,
